@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CPU Instruction Cycle Simulator — Frontend</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1e2530;
+    --border: #30363d;
+    --accent: #2f81f7;
+    --accent2: #56d364;
+    --accent3: #f7c948;
+    --accent4: #f85149;
+    --text: #c9d1d9;
+    --muted: #6e7681;
+    --font-mono: 'Courier New', monospace;
+    --font: 'Segoe UI', Arial, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 32px;
+    display: flex; align-items: center; gap: 16px;
+  }
+  header .logo { width: 36px; height: 36px; background: var(--accent); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px; color: #fff; }
+  header h1 { font-size: 18px; font-weight: 600; }
+  header span { font-size: 13px; color: var(--muted); }
+
+  .layout { display: grid; grid-template-columns: 320px 1fr; gap: 0; height: calc(100vh - 65px); }
+
+  /* Left Panel - Controls */
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 20px;
+    overflow-y: auto;
+    display: flex; flex-direction: column; gap: 20px;
+  }
+  .section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 10px; font-weight: 600; }
+
+  .program-editor textarea {
+    width: 100%; height: 160px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--accent2); font-family: var(--font-mono); font-size: 13px;
+    padding: 10px; resize: vertical; outline: none;
+    line-height: 1.6;
+  }
+  .program-editor textarea:focus { border-color: var(--accent); }
+
+  .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+  button {
+    padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer;
+    font-size: 13px; font-weight: 600; transition: all 0.15s;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #4090ff; }
+  .btn-success { background: #238636; color: #fff; }
+  .btn-success:hover { background: #2ea043; }
+  .btn-warn { background: #9e6a03; color: #fff; }
+  .btn-warn:hover { background: #b8860b; }
+  .btn-danger { background: #b62324; color: #fff; }
+  .btn-danger:hover { background: #d7373a; }
+  .btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost:hover { background: var(--border); }
+
+  /* Registers */
+  .register-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .reg-card {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; transition: all 0.3s;
+  }
+  .reg-card.active { border-color: var(--accent); box-shadow: 0 0 12px rgba(47,129,247,0.3); }
+  .reg-card.updated { border-color: var(--accent3); box-shadow: 0 0 12px rgba(247,201,72,0.3); animation: pulse 0.5s ease; }
+  @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.04); } }
+  .reg-label { font-size: 10px; color: var(--muted); margin-bottom: 4px; font-weight: 600; letter-spacing: 0.5px; }
+  .reg-value { font-family: var(--font-mono); font-size: 20px; font-weight: 700; color: var(--accent); }
+  .reg-full { grid-column: 1 / -1; }
+
+  /* Flags */
+  .flags { display: flex; gap: 8px; }
+  .flag { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700;
+    border: 1px solid var(--border); background: var(--bg); color: var(--muted); transition: all 0.3s; }
+  .flag.on { background: var(--accent2); color: var(--bg); border-color: var(--accent2); }
+
+  /* Main Panel */
+  .main { display: grid; grid-template-rows: 1fr 200px; overflow: hidden; }
+
+  /* CPU Diagram */
+  .cpu-diagram { padding: 24px; overflow-y: auto; }
+  .diagram-title { font-size: 13px; color: var(--muted); margin-bottom: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+  .stage-flow { display: flex; align-items: center; gap: 0; margin-bottom: 24px; }
+  .stage-box {
+    flex: 1; padding: 16px; border-radius: 10px; border: 2px solid var(--border);
+    background: var(--surface2); text-align: center; transition: all 0.4s; position: relative;
+  }
+  .stage-box.active {
+    border-color: var(--accent); background: rgba(47,129,247,0.1);
+    box-shadow: 0 0 24px rgba(47,129,247,0.25);
+  }
+  .stage-box.done { border-color: var(--accent2); background: rgba(86,211,100,0.05); }
+  .stage-icon { font-size: 28px; margin-bottom: 6px; }
+  .stage-name { font-size: 14px; font-weight: 700; }
+  .stage-desc { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
+  .arrow { font-size: 24px; color: var(--muted); padding: 0 8px; transition: color 0.3s; }
+  .arrow.active { color: var(--accent); }
+
+  /* Memory Table */
+  .memory-section { padding: 0 24px 24px; }
+  .memory-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 6px; max-height: 160px; overflow-y: auto; }
+  .mem-cell {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 8px; font-family: var(--font-mono); font-size: 11px; transition: all 0.3s;
+  }
+  .mem-cell.active-addr { border-color: var(--accent3); background: rgba(247,201,72,0.1); }
+  .mem-cell .addr { color: var(--muted); font-size: 10px; }
+  .mem-cell .val { color: var(--accent2); font-weight: 700; font-size: 13px; }
+
+  /* Console */
+  .console-panel {
+    background: #0a0d10; border-top: 1px solid var(--border);
+    display: flex; flex-direction: column;
+  }
+  .console-header {
+    padding: 8px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 12px; color: var(--muted); font-weight: 600;
+  }
+  .console-header .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .console-body { padding: 12px 16px; overflow-y: auto; flex: 1; font-family: var(--font-mono); font-size: 12px; line-height: 1.8; }
+  .log-fetch { color: #79c0ff; }
+  .log-decode { color: #d2a8ff; }
+  .log-execute { color: var(--accent2); }
+  .log-info { color: var(--muted); }
+  .log-halt { color: var(--accent4); font-weight: bold; }
+  .log-reg { color: var(--accent3); }
+
+  /* Instruction Set Reference */
+  .iset { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .iset-row { display: flex; gap: 8px; align-items: center; }
+  .iset-op { font-family: var(--font-mono); font-size: 12px; color: var(--accent3); min-width: 60px; font-weight: bold; }
+  .iset-desc { font-size: 11px; color: var(--muted); }
+
+  .speed-control { display: flex; align-items: center; gap: 10px; }
+  .speed-control label { font-size: 12px; color: var(--muted); }
+  input[type=range] { accent-color: var(--accent); flex: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">⚙</div>
+  <div>
+    <h1>CPU Instruction Cycle Simulator</h1>
+    <span>Von Neumann Architecture — Fetch · Decode · Execute</span>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <div class="sidebar">
+
+    <div class="program-editor">
+      <div class="section-label">Program (Instruction Set)</div>
+      <textarea id="program" spellcheck="false">LOAD 200
+ADD 201
+SUB 202
+STORE 300
+LOAD 201
+ADD 202
+STORE 301
+HALT</textarea>
+      <div style="margin-top:8px;font-size:11px;color:var(--muted)">
+        Opcodes: LOAD, STORE, ADD, SUB, MUL, AND, OR, JMP, HALT
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">Memory Preload (addr=value)</div>
+      <textarea id="meminit" style="width:100%;height:80px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:#e3b341;font-family:var(--font-mono);font-size:12px;padding:8px;outline:none;resize:none" spellcheck="false">200=15
+201=8
+202=3</textarea>
+    </div>
+
+    <div class="btn-group">
+      <button class="btn-primary" onclick="loadProgram()">▶ Load</button>
+      <button class="btn-success" onclick="step()">⏭ Step</button>
+      <button class="btn-warn" onclick="runAll()">⚡ Run All</button>
+      <button class="btn-danger" onclick="resetSim()">↺ Reset</button>
+    </div>
+
+    <div class="speed-control">
+      <label>Speed</label>
+      <input type="range" id="speed" min="100" max="1500" value="700" step="100">
+      <label id="speedval">700ms</label>
+    </div>
+
+    <div>
+      <div class="section-label">Registers</div>
+      <div class="register-grid">
+        <div class="reg-card" id="reg-PC">
+          <div class="reg-label">PC — Program Counter</div>
+          <div class="reg-value" id="val-PC">0</div>
+        </div>
+        <div class="reg-card" id="reg-AC">
+          <div class="reg-label">AC — Accumulator</div>
+          <div class="reg-value" id="val-AC">0</div>
+        </div>
+        <div class="reg-card reg-full" id="reg-IR">
+          <div class="reg-label">IR — Instruction Register</div>
+          <div class="reg-value" id="val-IR" style="font-size:15px">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">Status Flags</div>
+      <div class="flags">
+        <div class="flag" id="flag-Z">Z</div>
+        <div class="flag" id="flag-C">C</div>
+        <div class="flag" id="flag-N">N</div>
+        <div class="flag" id="flag-V">V</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">Instruction Set</div>
+      <div class="iset">
+        <div class="iset-row"><span class="iset-op">LOAD</span><span class="iset-desc">AC = mem[addr]</span></div>
+        <div class="iset-row"><span class="iset-op">STORE</span><span class="iset-desc">mem[addr] = AC</span></div>
+        <div class="iset-row"><span class="iset-op">ADD</span><span class="iset-desc">AC += mem[addr]</span></div>
+        <div class="iset-row"><span class="iset-op">SUB</span><span class="iset-desc">AC -= mem[addr]</span></div>
+        <div class="iset-row"><span class="iset-op">MUL</span><span class="iset-desc">AC *= mem[addr]</span></div>
+        <div class="iset-row"><span class="iset-op">AND</span><span class="iset-desc">AC &= mem[addr]</span></div>
+        <div class="iset-row"><span class="iset-op">OR</span><span class="iset-desc">AC |= mem[addr]</span></div>
+        <div class="iset-row"><span class="iset-op">JMP</span><span class="iset-desc">PC = addr</span></div>
+        <div class="iset-row"><span class="iset-op">HALT</span><span class="iset-desc">Stop execution</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Main Area -->
+  <div class="main">
+    <div style="overflow-y:auto">
+      <div class="cpu-diagram">
+        <div class="diagram-title">Instruction Cycle Pipeline</div>
+        <div class="stage-flow">
+          <div class="stage-box" id="stage-fetch">
+            <div class="stage-icon">📥</div>
+            <div class="stage-name">FETCH</div>
+            <div class="stage-desc" id="fetch-detail">Read instruction<br>from mem[PC]</div>
+          </div>
+          <div class="arrow" id="arr1">→</div>
+          <div class="stage-box" id="stage-decode">
+            <div class="stage-icon">🔍</div>
+            <div class="stage-name">DECODE</div>
+            <div class="stage-desc" id="decode-detail">Identify opcode<br>and operand</div>
+          </div>
+          <div class="arrow" id="arr2">→</div>
+          <div class="stage-box" id="stage-execute">
+            <div class="stage-icon">⚡</div>
+            <div class="stage-name">EXECUTE</div>
+            <div class="stage-desc" id="execute-detail">ALU operation<br>update registers</div>
+          </div>
+          <div class="arrow" id="arr3">↻</div>
+          <div class="stage-box" id="stage-loop" style="max-width:100px">
+            <div class="stage-icon">🔄</div>
+            <div class="stage-name">LOOP</div>
+            <div class="stage-desc">Next cycle<br>or HALT</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="memory-section">
+        <div class="section-label" style="padding:0 0 10px 0">Memory View</div>
+        <div class="memory-grid" id="memory-grid"></div>
+      </div>
+    </div>
+
+    <!-- Console -->
+    <div class="console-panel">
+      <div class="console-header">
+        <div>
+          <span class="dot" style="background:#f85149"></span>
+          <span class="dot" style="background:#f7c948"></span>
+          <span class="dot" style="background:#56d364"></span>
+          Console Output
+        </div>
+        <button class="btn-ghost" style="padding:4px 10px;font-size:11px" onclick="clearConsole()">Clear</button>
+      </div>
+      <div class="console-body" id="console"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const MEMORY_SIZE = 500;
+let memory = new Array(MEMORY_SIZE).fill(0);
+let PC = 0, AC = 0, IR = '';
+let program = [];
+let flags = { Z: false, C: false, N: false, V: false };
+let running = false, halted = false;
+let cycleCount = 0;
+
+document.getElementById('speed').addEventListener('input', function() {
+  document.getElementById('speedval').textContent = this.value + 'ms';
+});
+
+function log(msg, cls = 'log-info') {
+  const con = document.getElementById('console');
+  const line = document.createElement('div');
+  line.className = cls;
+  line.textContent = msg;
+  con.appendChild(line);
+  con.scrollTop = con.scrollHeight;
+}
+
+function clearConsole() { document.getElementById('console').innerHTML = ''; }
+
+function loadProgram() {
+  resetSim();
+  const lines = document.getElementById('program').value.trim().split('\n').filter(l => l.trim());
+  program = lines.map(l => l.trim());
+  // Load memory
+  const memLines = document.getElementById('meminit').value.trim().split('\n').filter(l => l.trim());
+  memLines.forEach(l => {
+    const [addr, val] = l.split('=').map(x => parseInt(x.trim()));
+    if (!isNaN(addr) && !isNaN(val)) memory[addr] = val;
+  });
+  log('> Program loaded: ' + program.length + ' instructions');
+  log('> Memory initialized');
+  log('> PC=0, AC=0 | Ready to execute');
+  log('─'.repeat(40), 'log-info');
+  updateUI();
+  renderMemory();
+}
+
+function resetSim() {
+  PC = 0; AC = 0; IR = ''; halted = false; running = false; cycleCount = 0;
+  memory = new Array(MEMORY_SIZE).fill(0);
+  flags = { Z: false, C: false, N: false, V: false };
+  setActiveStage(null);
+  updateUI();
+  renderMemory();
+}
+
+function updateUI(changed = []) {
+  document.getElementById('val-PC').textContent = PC;
+  document.getElementById('val-AC').textContent = AC;
+  document.getElementById('val-IR').textContent = IR || '—';
+  ['PC','AC','IR'].forEach(r => {
+    document.getElementById('reg-' + r).className = 'reg-card' + (r.length > 2 ? ' reg-full' : '') + (changed.includes(r) ? ' updated' : '');
+  });
+  ['Z','C','N','V'].forEach(f => {
+    document.getElementById('flag-' + f).className = 'flag' + (flags[f] ? ' on' : '');
+  });
+}
+
+function setActiveStage(stage) {
+  ['fetch','decode','execute','loop'].forEach(s => {
+    document.getElementById('stage-' + s).className = 'stage-box';
+  });
+  ['arr1','arr2','arr3'].forEach(a => {
+    document.getElementById(a).className = 'arrow';
+  });
+  if (stage === 'fetch') {
+    document.getElementById('stage-fetch').className = 'stage-box active';
+  } else if (stage === 'decode') {
+    document.getElementById('stage-fetch').className = 'stage-box done';
+    document.getElementById('arr1').className = 'arrow active';
+    document.getElementById('stage-decode').className = 'stage-box active';
+  } else if (stage === 'execute') {
+    document.getElementById('stage-fetch').className = 'stage-box done';
+    document.getElementById('stage-decode').className = 'stage-box done';
+    document.getElementById('arr2').className = 'arrow active';
+    document.getElementById('stage-execute').className = 'stage-box active';
+  } else if (stage === 'loop') {
+    document.getElementById('stage-fetch').className = 'stage-box done';
+    document.getElementById('stage-decode').className = 'stage-box done';
+    document.getElementById('stage-execute').className = 'stage-box done';
+    document.getElementById('arr3').className = 'arrow active';
+    document.getElementById('stage-loop').className = 'stage-box active';
+  }
+}
+
+function renderMemory(activeAddr = -1) {
+  const grid = document.getElementById('memory-grid');
+  const addrs = new Set([...Array(10).keys()].map(i => i + 100));
+  // Show all interesting addresses
+  document.getElementById('meminit').value.split('\n').forEach(l => {
+    const a = parseInt(l.split('=')[0]);
+    if (!isNaN(a)) { addrs.add(a); for(let i=-2;i<=2;i++) addrs.add(a+i); }
+  });
+  if (activeAddr >= 0) { addrs.add(activeAddr); for(let i=-2;i<=2;i++) addrs.add(activeAddr+i); }
+  [...addrs].filter(a => a >= 0 && a < MEMORY_SIZE).sort((a,b)=>a-b).slice(0, 30).forEach(addr => {
+    let cell = document.getElementById('mem-' + addr);
+    if (!cell) {
+      cell = document.createElement('div');
+      cell.className = 'mem-cell';
+      cell.id = 'mem-' + addr;
+      cell.innerHTML = `<div class="addr">0x${addr.toString(16).toUpperCase().padStart(3,'0')}</div><div class="val" id="memval-${addr}">0</div>`;
+      grid.appendChild(cell);
+    }
+    cell.className = 'mem-cell' + (addr === activeAddr ? ' active-addr' : '');
+    document.getElementById('memval-' + addr).textContent = memory[addr];
+  });
+}
+
+async function step() {
+  if (halted || program.length === 0) { log('> No program loaded or simulation halted.', 'log-halt'); return; }
+
+  const delay = ms => new Promise(r => setTimeout(r, ms));
+  const spd = parseInt(document.getElementById('speed').value);
+
+  // FETCH
+  if (PC >= program.length) { halted = true; log('> PC out of bounds — HALT', 'log-halt'); return; }
+  setActiveStage('fetch');
+  const instr = program[PC];
+  IR = instr;
+  const prevPC = PC;
+  PC++;
+  document.getElementById('fetch-detail').textContent = `mem[${prevPC}] = "${instr}"`;
+  log(`[Cycle ${++cycleCount}] FETCH   → PC=${prevPC} → IR="${instr}" → PC→${PC}`, 'log-fetch');
+  updateUI(['PC', 'IR']);
+  await delay(spd);
+
+  // DECODE
+  setActiveStage('decode');
+  const parts = instr.trim().split(/\s+/);
+  const opcode = parts[0].toUpperCase();
+  const operand = parts[1] !== undefined ? parseInt(parts[1]) : null;
+  document.getElementById('decode-detail').textContent = `OP=${opcode}\nARG=${operand !== null ? operand : 'none'}`;
+  log(`         DECODE  → opcode="${opcode}" operand=${operand !== null ? operand : 'N/A'}`, 'log-decode');
+  await delay(spd);
+
+  // EXECUTE
+  setActiveStage('execute');
+  let desc = '';
+  let changed = [];
+  flags = { Z: false, C: false, N: false, V: false };
+
+  switch (opcode) {
+    case 'LOAD':
+      AC = memory[operand] || 0;
+      desc = `AC = mem[${operand}] = ${AC}`;
+      changed = ['AC'];
+      renderMemory(operand);
+      break;
+    case 'STORE':
+      memory[operand] = AC;
+      desc = `mem[${operand}] = AC = ${AC}`;
+      renderMemory(operand);
+      break;
+    case 'ADD': {
+      const prev = AC; AC = (AC + (memory[operand] || 0));
+      if (AC > 2147483647) { flags.C = true; AC = AC & 0x7FFFFFFF; }
+      desc = `AC = ${prev} + mem[${operand}](${memory[operand]}) = ${AC}`;
+      changed = ['AC'];
+      renderMemory(operand);
+      break;
+    }
+    case 'SUB': {
+      const prev = AC; AC = AC - (memory[operand] || 0);
+      desc = `AC = ${prev} - mem[${operand}](${memory[operand]}) = ${AC}`;
+      if (AC < 0) { flags.N = true; }
+      changed = ['AC'];
+      renderMemory(operand);
+      break;
+    }
+    case 'MUL': {
+      const prev = AC; AC = AC * (memory[operand] || 0);
+      desc = `AC = ${prev} * mem[${operand}](${memory[operand]}) = ${AC}`;
+      changed = ['AC'];
+      break;
+    }
+    case 'AND':
+      AC = AC & (memory[operand] || 0);
+      desc = `AC = AC & mem[${operand}] = ${AC}`;
+      changed = ['AC'];
+      break;
+    case 'OR':
+      AC = AC | (memory[operand] || 0);
+      desc = `AC = AC | mem[${operand}] = ${AC}`;
+      changed = ['AC'];
+      break;
+    case 'JMP':
+      PC = operand;
+      desc = `PC = ${operand}`;
+      changed = ['PC'];
+      break;
+    case 'HALT':
+      halted = true;
+      desc = 'Execution halted';
+      log(`         EXECUTE → HALT — Simulation complete`, 'log-halt');
+      log(`─────────────────────────────────────`, 'log-info');
+      log(`Final State: PC=${PC} | AC=${AC} | Cycles=${cycleCount}`, 'log-reg');
+      setActiveStage('loop');
+      updateUI(changed);
+      return;
+    default:
+      desc = `Unknown opcode: ${opcode}`;
+      log(`         ERROR   → ${desc}`, 'log-halt');
+  }
+
+  if (AC === 0) flags.Z = true;
+  document.getElementById('execute-detail').textContent = desc;
+  log(`         EXECUTE → ${desc}`, 'log-execute');
+  log(`         Regs    → PC=${PC} | AC=${AC} | Z=${flags.Z?1:0} C=${flags.C?1:0} N=${flags.N?1:0}`, 'log-reg');
+  updateUI(changed);
+  await delay(spd * 0.5);
+  setActiveStage('loop');
+  await delay(spd * 0.3);
+  setActiveStage(null);
+}
+
+async function runAll() {
+  if (running) return;
+  if (program.length === 0) { log('> Load a program first.', 'log-halt'); return; }
+  running = true;
+  while (!halted && PC < program.length) {
+    await step();
+    if (halted) break;
+  }
+  running = false;
+}
+
+// Init
+window.onload = () => {
+  renderMemory();
+  log('> CPU Instruction Cycle Simulator ready.', 'log-info');
+  log('> Load a program to begin simulation.', 'log-info');
+};
+</script>
+</body>
+</html>
